@@ -149,4 +149,17 @@ class MemberRepositoryTest {
             System.out.println("member = " + member);
         }
     }
+
+    @Test
+    void returnType() {
+        Member m1 = new Member("AAA", 10);
+        Member m2 = new Member("BBB", 20);
+
+        memberRepository.save(m1);
+        memberRepository.save(m2);
+
+        List<Member> aaa = memberRepository.findListByUsername("AAA"); // jpa에서 list가 없으면 빈 리스트 반환
+        Member bbb = memberRepository.findMemberByUsername("AAA"); // Spring data jpa에서 단건 결과가 없으면 null 반환(NoResultException)
+        Optional<Member> aaa1 = memberRepository.findOptionalByUsername("AAA");
+    }
 }
