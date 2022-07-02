@@ -4,12 +4,18 @@ import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Slice;
+import org.springframework.data.domain.Sort;
 import org.springframework.test.annotation.Rollback;
 import org.springframework.transaction.annotation.Transactional;
 import study.datajpa.dto.MemberDto;
 import study.datajpa.entity.Member;
 import study.datajpa.entity.Team;
 
+import javax.persistence.EntityManager;
+import javax.persistence.PersistenceContext;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -24,6 +30,8 @@ class MemberRepositoryTest {
 
     @Autowired MemberRepository memberRepository;
     @Autowired TeamRepository teamRepository;
+    @PersistenceContext
+    EntityManager em;
 
     @Test
     void testMember() {
@@ -161,5 +169,119 @@ class MemberRepositoryTest {
         List<Member> aaa = memberRepository.findListByUsername("AAA"); // jpa에서 list가 없으면 빈 리스트 반환
         Member bbb = memberRepository.findMemberByUsername("AAA"); // Spring data jpa에서 단건 결과가 없으면 null 반환(NoResultException)
         Optional<Member> aaa1 = memberRepository.findOptionalByUsername("AAA");
+    }
+
+    @Test
+    void paging() {
+        //given
+        memberRepository.save(new Member("member1", 10));
+        memberRepository.save(new Member("member2", 10));
+        memberRepository.save(new Member("member3", 10));
+        memberRepository.save(new Member("member4", 10));
+        memberRepository.save(new Member("member5", 10));
+
+        int age = 10;
+        PageRequest pageRequest = PageRequest.of(0, 3, Sort.by(Sort.Direction.DESC, "username"));
+
+        // when
+        Page<Member> members = memberRepository.findByAge(age, pageRequest);
+        Slice<Member> slice = memberRepository.findSliceByAge(age, pageRequest);
+
+        Page<MemberDto> toMap = members.map(m -> new MemberDto(m.getId(), m.getUsername(), null));
+
+        System.out.println("toMap = " + toMap);
+
+        // then
+        List<Member> content = members.getContent();
+        long totalElements = members.getTotalElements();
+
+        assertThat(content.size()).isEqualTo(3);
+        assertThat(members.getTotalElements()).isEqualTo(5);
+        assertThat(members.getNumber()).isEqualTo(0);
+        assertThat(members.getTotalPages()).isEqualTo(2);
+        assertThat(members.isFirst()).isTrue();
+        assertThat(members.hasNext()).isTrue();
+
+    }
+    @Test
+    void bulkUpdate() {
+        //given
+        memberRepository.save(new Member("member1", 10));
+        memberRepository.save(new Member("member2", 19));
+        memberRepository.save(new Member("member3", 20));
+        memberRepository.save(new Member("member4", 21));
+        memberRepository.save(new Member("member5", 40));
+
+        //when
+        int resultCount = memberRepository.bulkAgePlus(20);
+//        em.flush();
+//        em.clear();
+
+        List<Member> result = memberRepository.findByUsername("member5");
+        Member member = result.get(0);
+        System.out.println("member = " + member);
+        //then
+        assertThat(resultCount).isEqualTo(3);
+    }
+
+    @Test
+    public void findMemberLazy() {
+        //given
+        //member1 -> teamA
+        //member2 -> teamB
+        Team teamA = new Team("teamA");
+        Team teamB = new Team("teamB");
+        teamRepository.save(teamA);
+        teamRepository.save(teamB);
+        Member member1 = new Member("member1", 10, teamA);
+        Member member2 = new Member("member2", 10, teamB);
+        memberRepository.save(member1);
+        memberRepository.save(member2);
+
+        em.flush();
+        em.clear();
+
+        //when
+//        List<Member> members = memberRepository.findAll();
+//        List<Member> memberFetchJoin = memberRepository.findMemberFetchJoin();
+        List<Member> members = memberRepository.findEntityGraphByUsername("member1");
+
+        for (Member member : members) {
+            System.out.println("member.getUsername() = " + member.getUsername());
+            // Lazyㅅㅣ 가짜 프록시
+            System.out.println("member.getTeam().getClass() = " + member.getTeam().getClass());
+            System.out.println("member.getTeam().getName() = " + member.getTeam().getName());
+        }
+
+//        for (Member member : memberFetchJoin) {
+//            System.out.println("member.getUsername() = " + member.getUsername());
+//        }
+    }
+
+    @Test
+    public void queryHint() {
+        //given
+        Member member1 = new Member("member1", 10);
+        memberRepository.save(member1);
+        em.flush();
+        em.clear();
+
+        //when
+        Member findMemebr = memberRepository.findReadOnlyByUsername("member1");
+        findMemebr.setUsername("member2");
+
+        em.flush();
+    }
+
+    @Test
+    public void lock() {
+        //given
+        Member member1 = new Member("member1", 10);
+        memberRepository.save(member1);
+        em.flush();
+        em.clear();
+
+        //when
+        List<Member> result = memberRepository.findLockByUsername("member1");
     }
 }
